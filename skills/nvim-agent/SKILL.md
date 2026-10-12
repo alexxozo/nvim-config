@@ -9,26 +9,24 @@ description: >-
 
 # nvim-agent
 
-Drive the user's **already running** Neovim (LazyVim) through the `nvim-agent` CLI.
+Drive the user's **already running** Neovim through the `nvim-agent` CLI. Works with any agent that can run shell commands (Cursor, Codex, Claude Code, etc.).
 
 ## Prerequisites
 
-- Neovim is open (with their LazyVim config that publishes `~/.cache/nvim-agent/server`)
-- CLI is on PATH: `~/.local/bin/nvim-agent`
+- Neovim is open (config publishes `~/.cache/nvim-agent/server`)
+- CLI on PATH: `nvim-agent` (usually `~/.local/bin/nvim-agent`)
 
-If status fails, tell the user to focus Neovim once (or run `:NvimAgentStatus`), then retry.
+If status fails, ask the user to focus Neovim once (or run `:NvimAgentStatus`), then retry.
 
 ## When to use
 
 - "Show me X in nvim", "open this file at line N", "run this in my editor"
 - Inspect what file/line they are on before advising
-- Prefer this over only editing on disk when they want the **UI** to move
+- Prefer this when they want the **UI** to move
 
 Do **not** use this for normal repo edits you can do with file tools; use it for **live UI control**.
 
 ## Commands
-
-Run via the Shell tool.
 
 ```bash
 nvim-agent status          # server + cwd + file

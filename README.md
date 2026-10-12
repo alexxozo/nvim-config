@@ -1,6 +1,6 @@
 # Neovim config (LazyVim + nvim-agent)
 
-Personal [LazyVim](https://github.com/LazyVim/LazyVim) setup with an **nvim-agent** bridge so Cursor (or any shell) can control the focused Neovim session.
+Personal [LazyVim](https://github.com/LazyVim/LazyVim) setup with an **nvim-agent** bridge so coding agents (Cursor, Codex, etc.) or a plain shell can control the focused Neovim session.
 
 ## What's included
 
@@ -8,27 +8,32 @@ Personal [LazyVim](https://github.com/LazyVim/LazyVim) setup with an **nvim-agen
 |------|---------|
 | `lua/config/` | LazyVim options, keymaps, autocmds |
 | `lua/config/nvim-agent.lua` | Publishes RPC address for remote control |
-| `bin/nvim-agent` | CLI used by agents / you |
-| `skills/nvim-agent/` | Cursor Agent Skill |
-| `install.sh` | Symlinks CLI + skill on a new machine |
+| `bin/nvim-agent` | Agent-agnostic CLI |
+| `skills/nvim-agent/` | Skill doc (same format for Cursor / Codex / …) |
+| `install.sh` | Symlinks CLI + skills on a new machine |
 | `lazyvim.json` | Enabled LazyVim extras |
 
 ## Fresh machine
 
 ```bash
-# requires: git, Neovim 0.11+, curl (LazyVim bootstrap)
-git clone <THIS_REPO_URL> ~/.config/nvim
+# requires: git, Neovim 0.11+, curl
+git clone git@github.com:alexxozo/nvim-config.git ~/.config/nvim
 ~/.config/nvim/install.sh
 nvim   # first launch installs plugins
 nvim-agent status
 ```
 
+`install.sh` links the skill into whichever agent homes exist:
+
+- `~/.cursor/skills/nvim-agent` (Cursor)
+- `~/.codex/skills/nvim-agent` (Codex)
+- `~/.agents/skills/nvim-agent` (shared agents dir, if present)
+
+The CLI always goes to `~/.local/bin/nvim-agent`.
+
 ## Iterate on this machine
 
-Edit files under `~/.config/nvim`, commit, push. The CLI and Cursor skill are symlinked into:
-
-- `~/.local/bin/nvim-agent`
-- `~/.cursor/skills/nvim-agent`
+Edit under `~/.config/nvim`, commit, push. Symlinks mean one source of truth.
 
 ## nvim-agent quick ref
 

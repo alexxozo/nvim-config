@@ -1,10 +1,16 @@
 #!/usr/bin/env bash
-# Install this Neovim config + nvim-agent CLI + Cursor skill on a machine.
+# Install this Neovim config + nvim-agent CLI + agent skills on a machine.
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 BIN_DIR="${XDG_BIN_HOME:-$HOME/.local/bin}"
-CURSOR_SKILLS="${HOME}/.cursor/skills"
+
+# Skill directories used by common coding agents (symlink into whichever exist / we create)
+SKILL_TARGETS=(
+  "${HOME}/.cursor/skills"
+  "${HOME}/.codex/skills"
+  "${HOME}/.agents/skills"
+)
 
 echo "==> Neovim config: ${REPO_DIR}"
 
@@ -26,18 +32,23 @@ if [[ "${REPO_DIR}" != "${TARGET}" ]]; then
   echo "==> Linked ${TARGET} -> ${REPO_DIR}"
 fi
 
-mkdir -p "${BIN_DIR}" "${CURSOR_SKILLS}"
-
+mkdir -p "${BIN_DIR}"
 ln -sfn "${REPO_DIR}/bin/nvim-agent" "${BIN_DIR}/nvim-agent"
 chmod +x "${REPO_DIR}/bin/nvim-agent"
 echo "==> Linked ${BIN_DIR}/nvim-agent"
 
-if [[ -d "${CURSOR_SKILLS}" ]]; then
-  ln -sfn "${REPO_DIR}/skills/nvim-agent" "${CURSOR_SKILLS}/nvim-agent"
-  echo "==> Linked ${CURSOR_SKILLS}/nvim-agent"
-else
-  echo "==> Skipped Cursor skill (${CURSOR_SKILLS} not found)"
-fi
+for skills_dir in "${SKILL_TARGETS[@]}"; do
+  parent="$(dirname "${skills_dir}")"
+  # Only install into agent homes that already exist (don't create empty .cursor on a Codex-only box, etc.)
+  # Exception: always create the skills dir if the parent agent dir exists.
+  if [[ -d "${parent}" ]]; then
+    mkdir -p "${skills_dir}"
+    ln -sfn "${REPO_DIR}/skills/nvim-agent" "${skills_dir}/nvim-agent"
+    echo "==> Linked ${skills_dir}/nvim-agent"
+  else
+    echo "==> Skipped ${skills_dir} (no $(basename "${parent}") install)"
+  fi
+done
 
 case ":$PATH:" in
   *":${BIN_DIR}:"*) ;;
@@ -50,6 +61,6 @@ esac
 echo
 echo "Done. Next:"
 echo "  1. Install Neovim 0.11+"
-echo "  2. Open nvim once (LazyVim will bootstrap plugins)"
+echo "  2. Open nvim once (plugins bootstrap)"
 echo "  3. nvim-agent status"
 echo "  4. In Neovim: :NvimAgentStatus"
