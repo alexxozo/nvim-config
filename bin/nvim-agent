@@ -1,0 +1,166 @@
+#!/usr/bin/env bash
+# Control the focused Neovim instance published by config/nvim-agent.lua
+set -euo pipefail
+
+POINTER="${NVIM_AGENT_POINTER:-$HOME/.cache/nvim-agent/server}"
+
+usage() {
+  cat <<'EOF'
+nvim-agent — control your focused Neovim from the shell / Cursor agent
+
+Usage:
+  nvim-agent status              Show server address + cwd/file
+  nvim-agent info               JSON snapshot (cwd, file, line, col, modified)
+  nvim-agent open <file> [line] Open file (optional 1-based line)
+  nvim-agent cmd <ex-command>   Run an Ex command (no leading :)
+  nvim-agent lua <code>         Evaluate Lua and print the result
+  nvim-agent expr <vim-expr>    Evaluate a Vimscript expression
+  nvim-agent send <keys>        Send raw keys (e.g. 'gg' or ':LazyGit<CR>')
+  nvim-agent eval-file          Print current buffer path
+
+Env:
+  NVIM_AGENT_POINTER   Override server pointer file
+  NVIM_AGENT_SERVER    Use this server address directly
+EOF
+}
+
+die() {
+  echo "nvim-agent: $*" >&2
+  exit 1
+}
+
+# JSON-string-literal encode (includes surrounding quotes)
+json_str() {
+  python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$1"
+}
+
+server_addr() {
+  if [[ -n "${NVIM_AGENT_SERVER:-}" ]]; then
+    printf '%s\n' "$NVIM_AGENT_SERVER"
+    return
+  fi
+  [[ -f "$POINTER" ]] || die "no server pointer at $POINTER — start Neovim (LazyVim) first"
+  local addr
+  addr="$(tr -d ' \n\t' <"$POINTER")"
+  [[ -n "$addr" ]] || die "empty server pointer at $POINTER"
+  # Drop stale sockets from crashed instances
+  if [[ "$addr" == /* ]] && [[ ! -S "$addr" ]] && [[ ! -e "$addr" ]]; then
+    die "stale server pointer ($addr) — focus Neovim or run :NvimAgentStatus"
+  fi
+  printf '%s\n' "$addr"
+}
+
+remote_expr() {
+  local addr="$1"
+  shift
+  nvim --server "$addr" --remote-expr "$*"
+}
+
+remote_send() {
+  local addr="$1"
+  shift
+  nvim --server "$addr" --remote-send "$*"
+}
+
+cmd="${1:-}"
+[[ -n "$cmd" ]] || { usage; exit 1; }
+shift || true
+
+case "$cmd" in
+  -h | --help | help)
+    usage
+    ;;
+
+  status)
+    addr="$(server_addr)"
+    echo "server: $addr"
+    echo "pointer: $POINTER"
+    echo -n "cwd: "
+    remote_expr "$addr" 'luaeval("vim.fn.getcwd()")'
+    echo
+    echo -n "file: "
+    remote_expr "$addr" 'luaeval("vim.api.nvim_buf_get_name(0)")'
+    echo
+    ;;
+
+  info)
+    addr="$(server_addr)"
+    remote_expr "$addr" 'luaeval("vim.json.encode({cwd=vim.fn.getcwd(),file=vim.api.nvim_buf_get_name(0),line=vim.api.nvim_win_get_cursor(0)[1],col=vim.api.nvim_win_get_cursor(0)[2]+1,modified=vim.bo.modified,filetype=vim.bo.filetype,server=vim.v.servername})")'
+    echo
+    ;;
+
+  open)
+    [[ $# -ge 1 ]] || die "open requires a file path"
+    file="$1"
+    line="${2:-0}"
+    if command -v realpath >/dev/null 2>&1; then
+      file="$(realpath "$file")"
+    fi
+    addr="$(server_addr)"
+    # Build a single Lua chunk in Python so paths/quotes stay safe
+    q="$(
+      LINE="$line" FILE="$file" python3 - <<'PY'
+import json, os
+file = os.environ["FILE"]
+line = int(os.environ["LINE"] or "0")
+# luaeval requires a single expression — wrap statements in an IIFE
+chunk = f"""(function()
+  vim.cmd.edit({json.dumps(file)})
+  local n = vim.api.nvim_buf_line_count(0)
+  local l = ({line} > 0) and {line} or 1
+  l = math.max(1, math.min(l, math.max(n, 1)))
+  vim.api.nvim_win_set_cursor(0, {{l, 0}})
+  return vim.api.nvim_buf_get_name(0) .. ":" .. l
+end)()"""
+print(json.dumps(chunk))
+PY
+    )"
+    result="$(remote_expr "$addr" "luaeval($q)")"
+    echo "opened: $result"
+    ;;
+
+  cmd)
+    [[ $# -ge 1 ]] || die "cmd requires an Ex command"
+    addr="$(server_addr)"
+    ex="$*"
+    remote_send "$addr" ":${ex}<CR>"
+    ;;
+
+  lua)
+    [[ $# -ge 1 ]] || die "lua requires code"
+    addr="$(server_addr)"
+    code="$*"
+    q="$(json_str "$code")"
+    # Expression form: nvim-agent lua 'vim.fn.getcwd()'
+    if out="$(remote_expr "$addr" "luaeval($q)" 2>/dev/null)"; then
+      printf '%s\n' "$out"
+    else
+      # Statement fallback: nvim-agent lua 'vim.notify("hi")'
+      remote_send "$addr" ":lua ${code}<CR>"
+      echo "(executed as Lua statement)"
+    fi
+    ;;
+
+  expr)
+    [[ $# -ge 1 ]] || die "expr requires a Vim expression"
+    addr="$(server_addr)"
+    remote_expr "$addr" "$*"
+    echo
+    ;;
+
+  send | feed)
+    [[ $# -ge 1 ]] || die "send requires keys"
+    addr="$(server_addr)"
+    remote_send "$addr" "$*"
+    ;;
+
+  eval-file)
+    addr="$(server_addr)"
+    remote_expr "$addr" 'luaeval("vim.api.nvim_buf_get_name(0)")'
+    echo
+    ;;
+
+  *)
+    die "unknown command: $cmd (try --help)"
+    ;;
+esac
