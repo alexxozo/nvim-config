@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install this Neovim config + nvim-agent + Handy/Herdr helpers + agent skills.
+# Install this Neovim config + nvim-agent CLI + agent skills on a machine.
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -11,12 +11,6 @@ SKILL_TARGETS=(
   "${HOME}/.agents/skills"
 )
 
-BIN_LINKS=(
-  nvim-agent
-  handy-to-herdr
-  handy-target
-)
-
 echo "==> Neovim config: ${REPO_DIR}"
 
 if [[ ! -f "${REPO_DIR}/init.lua" ]]; then
@@ -24,7 +18,6 @@ if [[ ! -f "${REPO_DIR}/init.lua" ]]; then
   exit 1
 fi
 
-# Expected location for Neovim
 TARGET="${XDG_CONFIG_HOME:-$HOME/.config}/nvim"
 if [[ "${REPO_DIR}" != "${TARGET}" ]]; then
   if [[ -e "${TARGET}" && ! -L "${TARGET}" ]]; then
@@ -38,14 +31,9 @@ if [[ "${REPO_DIR}" != "${TARGET}" ]]; then
 fi
 
 mkdir -p "${BIN_DIR}"
-for name in "${BIN_LINKS[@]}"; do
-  src="${REPO_DIR}/bin/${name}"
-  if [[ -f "$src" ]]; then
-    chmod +x "$src"
-    ln -sfn "$src" "${BIN_DIR}/${name}"
-    echo "==> Linked ${BIN_DIR}/${name}"
-  fi
-done
+chmod +x "${REPO_DIR}/bin/nvim-agent"
+ln -sfn "${REPO_DIR}/bin/nvim-agent" "${BIN_DIR}/nvim-agent"
+echo "==> Linked ${BIN_DIR}/nvim-agent"
 
 for skills_dir in "${SKILL_TARGETS[@]}"; do
   parent="$(dirname "${skills_dir}")"
@@ -57,30 +45,6 @@ for skills_dir in "${SKILL_TARGETS[@]}"; do
     echo "==> Skipped ${skills_dir} (no $(basename "${parent}") install)"
   fi
 done
-
-# Optional: point Handy at handy-to-herdr if Handy is installed
-HANDY_SETTINGS="${HOME}/Library/Application Support/com.pais.handy/settings_store.json"
-if [[ -f "$HANDY_SETTINGS" ]]; then
-  /usr/bin/python3 - "$HANDY_SETTINGS" "${BIN_DIR}/handy-to-herdr" <<'PY' && echo "==> Configured Handy external paste → handy-to-herdr" || true
-import json, sys
-from pathlib import Path
-path, script = Path(sys.argv[1]), sys.argv[2]
-data = json.loads(path.read_text())
-settings = data.setdefault("settings", {})
-settings["paste_method"] = "external_script"
-settings["external_script_path"] = script
-path.write_text(json.dumps(data, indent=2) + "\n")
-PY
-  echo "    (Quit/reopen Handy if it was running)"
-else
-  echo "==> Skipped Handy config (app settings not found)"
-fi
-
-mkdir -p "${HOME}/.config/herdr"
-if [[ ! -f "${HOME}/.config/herdr/handy-mode" ]]; then
-  printf 'herdr\n' >"${HOME}/.config/herdr/handy-mode"
-  echo "==> Default Handy mode: herdr (run handy-target to change)"
-fi
 
 case ":$PATH:" in
   *":${BIN_DIR}:"*) ;;
@@ -95,5 +59,7 @@ echo "Done. Next:"
 echo "  1. Install Neovim 0.11+"
 echo "  2. Open nvim once (plugins bootstrap)"
 echo "  3. nvim-agent status"
-echo "  4. handy-target   # choose Herdr pane vs native Handy paste"
-echo "  5. In Neovim: :NvimAgentStatus"
+echo "  4. In Neovim: :NvimAgentStatus"
+echo
+echo "Handy → Herdr dictation routing is a separate project:"
+echo "  https://github.com/alexxozo/handy-herdr"
